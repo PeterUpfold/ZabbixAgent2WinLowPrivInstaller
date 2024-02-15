@@ -59,6 +59,10 @@ $cfgFileContent = Get-Content -Path $confPath
 $cfgFileNewContent = $cfgFileContent -replace $logOrig, $logReplace
 $cfgFileNewContent | Set-Content -Path $confPath
 
+# Allow the service to finish starting before trying to stop it
+Start-Sleep -Seconds 5
+Stop-Service $serviceName
+
 # Set the account that runs the service
 $serviceWMI = Get-WmiObject -Class Win32_Service -Filter "name='$serviceName'"
 
@@ -97,4 +101,4 @@ if (-not (Test-Path $opensslPath)) {
 }
 
 # Restart service to apply changes
-Restart-Service $serviceName
+Start-Service $serviceName
