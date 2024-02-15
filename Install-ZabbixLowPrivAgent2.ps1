@@ -57,6 +57,7 @@ if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
 # Update the config file with the new log path
 $cfgFileContent = Get-Content -Path $confPath
 $cfgFileNewContent = $cfgFileContent -replace $logOrig, $logReplace
+$cfgFileNewContent | Set-Content -Path $confPath
 
 # Set the account that runs the service
 $serviceWMI = Get-WmiObject -Class Win32_Service -Filter "name='$serviceName'"
