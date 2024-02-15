@@ -25,12 +25,24 @@ if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
 
 
 # Set the account that runs the service. You may also need to provide the password argument for
-# an account that is not a builtin.
+# an account that is not in NT AUTHORITY.
 $serviceWMI = Get-WmiObject -Class Win32_Service -Filter "name='$serviceName'"
 $serviceWMI.Change($null, $null, $null, $null, $null, $null, $serviceAccount, $null, $null, $null, $null)
 
-# Revoke write access to SSL configuration in Windows
-if (-not )
+# Revoke write access to SSL configuration in Windows, only if it does not exist already
+if (-not (Test-Path $opensslPath)) {
+    New-Item -ItemType Directory $opensslPath
+
+    # break inheritance of permissions
+    icacls.exe "$opensslPath" /inheritance:r
+
+    # add full control for SYSTEM and BUILTIN\Admininstrators
+    icacls.exe "$opensslPath" /grant "BUILTIN\Administrators:(OI)(CI)(F)"
+    icacls.exe "$opensslPath" /grant "NT AUTHORITY\SYSTEM:(OI)(CI)(F)"
+
+    # add read-only ACE for Users
+    icacls.exe "$opensslPath" /grant "BUILTIN\Users:(OI)(CI)(RX)"
+}
 
 
 # Restart service to apply changes
