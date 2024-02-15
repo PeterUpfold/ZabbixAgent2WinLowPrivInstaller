@@ -29,6 +29,14 @@ $serviceAccount = "NT AUTHORITY\LocalService" # The account used must have "Log 
 $opensslPath = "C:\openssl-64bit" # we revoke write access to this folder by normal users as per the Zabbix Agent hardening guide
 $msiLogFile = "$($env:TEMP)\zabbix-agent2-msi.log"
 $servers = "127.0.0.1" # comma separated IP addresses of your Zabbix server(s) and proxies
+$confPath = "C:\Program Files\Zabbix Agent 2\zabbix_agent2.conf"
+
+# The log file must be set to a path that NT AUTHORITY\LocalService can write to,
+# or the service will not start. Alternatively, do your own config file handling, but
+# ensure that the log file path will be writable by the user. It can't tell you why
+# the service won't start if the reason for it is that it can't write to the log file!
+$logOrig = "C:\\Program Files\\Zabbix Agent 2\\zabbix_agent2.log" # default logfile string (escaped backslashes)
+$logReplace = "C:\Windows\ServiceProfiles\LocalService\zabbix_agent2.log" # replaced logfile string (plain)
 
 # Install the MSI
 $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList @(
@@ -40,19 +48,17 @@ $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList @(
     "SERVER=$servers"
 ) -PassThru -Wait
 
+# Check the MSI installed
 if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
     Write-Error "MSI installation failed with exit code $($proc.ExitCode). See $msiLogFile for details."
     exit $proc.ExitCode
 }
 
-# The log file must be set to a path that NT AUTHORITY\LocalService can write to,
-# or the service will not start. Alternatively, do your own config file handling, but
-# ensure that the log file path will be writable by the user.
+# Update the config file with the new log path
+$cfgFileContent = Get-Content -Path $confPath
+$cfgFileNewContent = $cfgFileContent -replace $logOrig, $logReplace
 
-
-
-# Set the account that runs the service. To use a different account, you may also need to provide
-# a password argument.
+# Set the account that runs the service
 $serviceWMI = Get-WmiObject -Class Win32_Service -Filter "name='$serviceName'"
 
 #ref: https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/change-method-in-class-win32-service 
@@ -69,9 +75,12 @@ $serviceWMI = Get-WmiObject -Class Win32_Service -Filter "name='$serviceName'"
 #   [in] string  LoadOrderGroupDependencies[],
 #   [in] string  ServiceDependencies[]
 # );
+# To use a different account, you may also need to provide
+# a password argument.
 $serviceWMI.Change($null, $null, $null, $null, $null, $null, $serviceAccount, $null, $null, $null, $null)
 
-# Revoke write access to SSL configuration in Windows, only if it does not exist already
+# Revoke write access to OpenSSL configuration in Windows, only if it does not exist already
+#ref: https://www.zabbix.com/documentation/current/en/manual/installation/requirements/best_practices
 if (-not (Test-Path $opensslPath)) {
     New-Item -ItemType Directory $opensslPath
 
@@ -85,7 +94,6 @@ if (-not (Test-Path $opensslPath)) {
     # add read-only ACE for Users
     icacls.exe "$opensslPath" /grant "BUILTIN\Users:(OI)(CI)(RX)"
 }
-
 
 # Restart service to apply changes
 Restart-Service $serviceName
